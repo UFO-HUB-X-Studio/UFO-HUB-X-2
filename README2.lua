@@ -1,5 +1,5 @@
 --========================================================
--- UFO HUB X — Custom Splash Screen (Black + Green Theme)
+-- UFO HUB X — Splash (Black+Green, centered, rocket lead)
 --========================================================
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -9,7 +9,13 @@ local pg           = lp:WaitForChild("PlayerGui")
 if _G.__UFOX_SPLASH then return end
 _G.__UFOX_SPLASH = true
 
--- ===== Screen =====
+-- THEME
+local ALIEN  = Color3.fromRGB(22,247,123)
+local WHITE  = Color3.fromRGB(255,255,255)
+local DARK20 = Color3.fromRGB(20,20,20)
+local DARK50 = Color3.fromRGB(50,50,50)
+
+-- SCREEN
 local screen = Instance.new("ScreenGui")
 screen.Name = "UFOX_SPLASH"
 screen.IgnoreGuiInset = true
@@ -18,92 +24,136 @@ screen.DisplayOrder = 3000
 screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screen.Parent = pg
 
--- ===== Black Background =====
-local bg = Instance.new("Frame", screen)
+-- FULL BLACK BACKDROP
+local bg = Instance.new("Frame")
 bg.Size = UDim2.fromScale(1,1)
-bg.BackgroundColor3 = Color3.fromRGB(0,0,0)
+bg.BackgroundColor3 = Color3.new(0,0,0)
+bg.Parent = screen
 
--- ===== Card =====
-local card = Instance.new("Frame", bg)
+-- CARD
+local card = Instance.new("Frame")
 card.AnchorPoint = Vector2.new(0.5,0.5)
 card.Position    = UDim2.fromScale(0.5,0.5)
-card.Size        = UDim2.fromOffset(520, 260)
-card.BackgroundColor3 = Color3.fromRGB(20,20,20)
+card.Size        = UDim2.fromOffset(560, 300)
+card.BackgroundColor3 = DARK20
 card.BorderSizePixel = 0
-Instance.new("UICorner", card).CornerRadius = UDim.new(0,16)
+card.Parent = bg
+Instance.new("UICorner", card).CornerRadius = UDim.new(0,18)
 
--- ===== Logo =====
-local logo = Instance.new("ImageLabel", card)
+-- GREEN BORDER รอบ UI
+local cardStroke = Instance.new("UIStroke", card)
+cardStroke.Color = ALIEN
+cardStroke.Thickness = 2
+cardStroke.Transparency = 0.25
+
+-- LOGO (ใหญ่ขึ้น)
+local logo = Instance.new("ImageLabel")
 logo.BackgroundTransparency = 1
-logo.Image = "rbxassetid://106029438403666" -- โลโก้ UFO
-logo.Size = UDim2.fromOffset(64,64)
-logo.Position = UDim2.new(0.5,0,0,10)
+logo.Image = "rbxassetid://106029438403666"
+logo.Size = UDim2.fromOffset(96,96)
 logo.AnchorPoint = Vector2.new(0.5,0)
+logo.Position = UDim2.new(0.5,0,0,14)
+logo.Parent = card
 
--- ===== Title =====
-local title = Instance.new("TextLabel", card)
+-- TITLE (อยู่กลางจริง ๆ)
+local title = Instance.new("TextLabel")
 title.BackgroundTransparency = 1
-title.Position = UDim2.new(0.5,0,0,90)
-title.Size = UDim2.new(1,0,0,40)
+title.Size = UDim2.new(1,0,0,42)
+title.Position = UDim2.new(0,0,0,120)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 28
+title.TextSize = 30
+title.TextXAlignment = Enum.TextXAlignment.Center
 title.RichText = true
 title.Text = '<font color="#16F77B">UFO</font> <font color="#FFFFFF">HUB X</font>'
-title.TextColor3 = Color3.fromRGB(255,255,255)
-title.TextXAlignment = Enum.TextXAlignment.Center
+title.TextColor3 = WHITE
+title.Parent = card
 
--- ===== Progress Bar =====
-local barBG = Instance.new("Frame", card)
-barBG.Size = UDim2.new(1,-60,0,28)
-barBG.Position = UDim2.new(0.5,0,0,150)
+-- PROGRESS BAR BG + ขอบสีขาว
+local barBG = Instance.new("Frame")
+barBG.Size = UDim2.new(1,-80,0,30)
 barBG.AnchorPoint = Vector2.new(0.5,0)
-barBG.BackgroundColor3 = Color3.fromRGB(50,50,50)
+barBG.Position = UDim2.new(0.5,0,0,175)
+barBG.BackgroundColor3 = DARK50
 barBG.BorderSizePixel = 0
+barBG.Parent = card
 Instance.new("UICorner", barBG).CornerRadius = UDim.new(0,12)
 
-local barFill = Instance.new("Frame", barBG)
-barFill.BackgroundColor3 = Color3.fromRGB(22,247,123)
-barFill.BorderSizePixel = 0
+local barStroke = Instance.new("UIStroke", barBG)
+barStroke.Color = WHITE
+barStroke.Thickness = 2
+barStroke.Transparency = 0.15
+
+-- FILL
+local barFill = Instance.new("Frame")
 barFill.Size = UDim2.new(0,0,1,0)
+barFill.BackgroundColor3 = ALIEN
+barFill.BorderSizePixel = 0
+barFill.Parent = barBG
 Instance.new("UICorner", barFill).CornerRadius = UDim.new(0,12)
 
--- ===== Rocket =====
-local rocket = Instance.new("TextLabel", barFill)
+-- ROCKET (นำหน้าแถบ)
+local rocket = Instance.new("TextLabel")
 rocket.BackgroundTransparency = 1
 rocket.Size = UDim2.fromOffset(28,28)
 rocket.AnchorPoint = Vector2.new(0.5,0.5)
-rocket.Position = UDim2.new(0,0,0.5,0)
 rocket.Text = "🚀"
 rocket.TextSize = 22
+rocket.Rotation = 0      -- หันหน้าตรงตามแนวหลอด
+rocket.Parent = barBG
 
--- ===== % Number =====
-local percent = Instance.new("TextLabel", card)
+-- % NUMBER กลางการ์ด
+local percent = Instance.new("TextLabel")
 percent.BackgroundTransparency = 1
 percent.Size = UDim2.new(1,0,0,40)
-percent.Position = UDim2.new(0.5,0,0,190)
-percent.AnchorPoint = Vector2.new(0.5,0)
+percent.Position = UDim2.new(0,0,0,215)
 percent.Font = Enum.Font.GothamBold
-percent.TextSize = 30
-percent.TextColor3 = Color3.fromRGB(255,255,255)
+percent.TextSize = 32
+percent.TextColor3 = WHITE
+percent.TextXAlignment = Enum.TextXAlignment.Center
 percent.Text = "0%"
+percent.Parent = card
 
--- ===== Progress Logic =====
+-- INTRO POP
+card.Size = UDim2.fromOffset(560*0.92, 300*0.92)
+card.BackgroundTransparency = 0.2
+TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	{Size=UDim2.fromOffset(560,300), BackgroundTransparency=0}):Play()
+
+-- PROGRESS (ช้าลง ~10 วิ) + จรวดนำหลอด ~10 พิกเซล
+local TOTAL_TIME = 10      -- ปรับความช้าตรงนี้
+local ROCKET_LEAD = 10     -- ระยะนำหน้า (px)
+local start = tick()
+
 local function setProgress(p)
 	p = math.clamp(p,0,1)
+	-- ปรับขนาด fill
 	barFill.Size = UDim2.new(p,0,1,0)
-	rocket.Position = UDim2.new(p,0,0.5,0)
+	-- คำนวณตำแหน่งจรวดให้นำหน้าปลายแถบเล็กน้อย
+	local bgAbsW = barBG.AbsoluteSize.X
+	local px = p * bgAbsW + (-bgAbsW/2) + ROCKET_LEAD
+	rocket.Position = UDim2.new(0.5, px, 0.5, 0)
 	percent.Text = ("%d%%"):format(math.floor(p*100))
 end
 
 task.spawn(function()
-	for i=1,100 do
-		setProgress(i/100)
-		task.wait(0.05) -- ความเร็วในการโหลด (0.05 = 5 วินาทีโดยประมาณ)
+	while true do
+		local t = math.clamp((tick()-start)/TOTAL_TIME, 0, 1)
+		-- ease-out cubic ให้ลื่น
+		local eased = 1 - (1 - t)^3
+		setProgress(eased)
+		if t >= 1 then break end
+		task.wait()
 	end
-	task.wait(0.5)
+	task.wait(0.3)
+	-- OUT
+	local fade = TweenService:Create(card, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{BackgroundTransparency = 1})
+	fade:Play()
+	TweenService:Create(bg, TweenInfo.new(0.45), {BackgroundTransparency = 1}):Play()
+	fade.Completed:Wait()
 	screen:Destroy()
 	_G.__UFOX_SPLASH = nil
-	-- เรียก UI หลัก (ถ้ามี)
+	-- โชว์ UI หลักถ้ามี
 	if _G.__UFOX_UI_OBJ and _G.__UFOX_UI_OBJ.api then
 		_G.__UFOX_UI_OBJ.api.show()
 	end
