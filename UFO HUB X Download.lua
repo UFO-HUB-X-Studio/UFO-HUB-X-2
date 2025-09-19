@@ -1,5 +1,7 @@
 --========================================================
--- UFO HUB X — Download Screen (FULL, fixed background + order + clamp)
+-- UFO HUB X — Download Screen (FULL, with next-step hook)
+-- - เมื่อโหลดครบ: ทำลาย UI นี้ แล้วเรียก _G.UFO_OnDownloadClosed()
+--   ถ้าไม่มี ให้ลองโหลดจาก _G.UFO_MAIN_URL ต่ออัตโนมัติ
 --========================================================
 
 -------------------- Services --------------------
@@ -9,10 +11,10 @@ local Cam = workspace.CurrentCamera
 
 -------------------- CONFIG --------------------
 local BG_IMAGE_ID = 98124588730893    -- รูปพื้นหลัง (เต็มจอ)
-local LOGO_ID     = 112676905543996   -- โลโก้ด้านบน (อยู่เหนือชื่อ)
+local LOGO_ID     = 112676905543996   -- โลโก้ด้านบน
 local UFO_RUN_ID  = 95708354427651    -- รูปยาน UFO ที่วิ่งบนหลอด
-local DURATION    = 10                -- เวลาโหลด 10 วินาที
-local Y_OFFSET    = -30               -- ยกกล่องขึ้นเล็กน้อย (ลบ=ขึ้น, บวก=ลง)
+local DURATION    = 10                 -- เวลาโหลด (วินาที)
+local Y_OFFSET    = -30                -- ยกกล่องขึ้นเล็กน้อย (ลบ=ขึ้น, บวก=ลง)
 
 -------------------- THEME --------------------
 local ACCENT = Color3.fromRGB(0,255,140)   -- เขียว UFO
@@ -33,12 +35,28 @@ local function make(class, props, kids)
     return o
 end
 
+-- เรียกขั้นถัดไปหลังปิดหน้าโหลด
+local function openNextStep()
+    -- 1) ถ้ามีฮุคจากสคริปต์คีย์ ให้เรียกก่อน
+    local called = false
+    if type(_G.UFO_OnDownloadClosed) == "function" then
+        called = true
+        pcall(_G.UFO_OnDownloadClosed)
+    end
+    -- 2) ถ้าไม่มีฮุค หรือฮุคไม่โหลดอะไรต่อ แล้วกำหนด URL ไว้ → โหลด UI หลัก
+    if _G.UFO_MAIN_URL and type(_G.UFO_MAIN_URL)=="string" and #_G.UFO_MAIN_URL>0 then
+        pcall(function()
+            loadstring(game:HttpGet(_G.UFO_MAIN_URL))()
+        end)
+    end
+end
+
 -------------------- ROOT GUI --------------------
 local gui = Instance.new("ScreenGui")
 gui.Name = "UFOHubX_Download"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.IgnoreGuiInset = true         -- <<< ทำให้เต็มจอจริง ไม่โดน TopBar ดัน
+gui.IgnoreGuiInset = true                -- เต็มจอจริง
 safeParent(gui)
 
 -------------------- BACKGROUND (เต็มจอ) --------------------
@@ -72,7 +90,7 @@ Cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     win.Position = UDim2.fromScale(0.5,0.5) + UDim2.fromOffset(0, Y_OFFSET)
 end)
 
--------------------- HEADER: โลโก้ (บน) + ชื่อ (ล่าง) --------------------
+-------------------- HEADER: โลโก้ + ชื่อ --------------------
 local header = make("Frame", {
     Parent=win, BackgroundTransparency=1,
     Size=UDim2.new(1,0,0,120), Position=UDim2.new(0,0,0,12)
@@ -86,7 +104,6 @@ local vlist = make("UIListLayout", {
     Padding = UDim.new(0,8)
 }, {})
 
--- โลโก้ (บน)
 local logo = make("ImageLabel", {
     Parent=header, BackgroundTransparency=1,
     Image="rbxassetid://"..LOGO_ID,
@@ -95,7 +112,6 @@ local logo = make("ImageLabel", {
 }, {})
 logo.ZIndex = 3
 
--- ชื่อ (ล่าง): UFO เขียว + HUB X ขาว
 local titleRow = make("Frame", {
     Parent=header, BackgroundTransparency=1,
     Size=UDim2.new(1,0,0,34),
@@ -108,13 +124,13 @@ make("UIListLayout", {
     VerticalAlignment=Enum.VerticalAlignment.Center,
     Padding=UDim.new(0,8)
 }, {})
-local lblUFO = make("TextLabel", {
+make("TextLabel", {
     Parent=titleRow, BackgroundTransparency=1,
     AutomaticSize=Enum.AutomaticSize.X,
     Font=Enum.Font.GothamBold, TextSize=28,
     Text="UFO", TextColor3=ACCENT
 }, {})
-local lblHUBX = make("TextLabel", {
+make("TextLabel", {
     Parent=titleRow, BackgroundTransparency=1,
     AutomaticSize=Enum.AutomaticSize.X,
     Font=Enum.Font.GothamBold, TextSize=28,
@@ -145,7 +161,6 @@ local barFill = make("Frame", {
 })
 barFill.ZIndex = 4
 
--- เปอร์เซ็นต์กลางหลอด (อยู่บนสุดเสมอ)
 local percent = make("TextLabel", {
     Parent=barBG,
     BackgroundTransparency=1,
@@ -159,7 +174,6 @@ percent.ZIndex = 10
 percent.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 percent.TextStrokeTransparency = 0.4
 
--- UFO วิ่งบนหลอด (จะถูก clamp ไม่ให้ออกนอก)
 local ufo = make("ImageLabel", {
     Parent=barBG,
     BackgroundTransparency=1,
@@ -170,9 +184,19 @@ local ufo = make("ImageLabel", {
 }, {})
 ufo.ZIndex = 6
 
--------------------- PROGRESS (10 วินาที) --------------------
+-------------------- PROGRESS LOOP --------------------
 local start = tick()
 local done  = false
+
+local function finishAndGo()
+    if done then return end
+    done = true
+    task.delay(0.1, function()
+        pcall(function() gui:Destroy() end)
+        -- 🔗 เรียกเปิด UI UFO HUB X ต่อทันที
+        openNextStep()
+    end)
+end
 
 RS.RenderStepped:Connect(function()
     if done then return end
@@ -192,11 +216,9 @@ RS.RenderStepped:Connect(function()
     ufo.Position  = UDim2.fromOffset(x, barBG.AbsoluteSize.Y/2)
 
     if p >= 1 then
-        done = true
-        task.delay(0.25, function()
-            gui:Destroy()
-            -- TODO: เรียกเปิด UI UFO HUB X ต่อจากนี่ ถ้าต้องการ
-            -- เช่น: loadstring(game:HttpGet("https://.../ufo_hub_x.lua"))()
-        end)
+        finishAndGo()
     end
 end)
+
+-- กันกรณีโดนหยุด RenderStepped (เช่นสลับหน้าต่าง) ก็ยังไปต่อได้
+task.delay(DURATION + 0.5, finishAndGo)
