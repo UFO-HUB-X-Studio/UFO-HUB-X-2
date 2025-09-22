@@ -1,224 +1,195 @@
---========================================================
--- UFO HUB X — Download Screen (FULL, with next-step hook)
--- - เมื่อโหลดครบ: ทำลาย UI นี้ แล้วเรียก _G.UFO_OnDownloadClosed()
---   ถ้าไม่มี ให้ลองโหลดจาก _G.UFO_MAIN_URL ต่ออัตโนมัติ
---========================================================
+-- UFO HUB X — Multi-Map Bootstrapper (Download first -> Language Picker)
+-- ถ้าแมพไม่รองรับ: เงียบ ไม่ทำอะไร
+-- ถ้ารองรับ: แสดงหน้า Download ก่อน แล้วเด้งหน้าเลือกภาษา (TH/EN) ทันทีที่จบ
 
--------------------- Services --------------------
-local CG  = game:GetService("CoreGui")
-local RS  = game:GetService("RunService")
-local Cam = workspace.CurrentCamera
-
--------------------- CONFIG --------------------
-local BG_IMAGE_ID = 98124588730893    -- รูปพื้นหลัง (เต็มจอ)
-local LOGO_ID     = 112676905543996   -- โลโก้ด้านบน
-local UFO_RUN_ID  = 95708354427651    -- รูปยาน UFO ที่วิ่งบนหลอด
-local DURATION    = 10                 -- เวลาโหลด (วินาที)
-local Y_OFFSET    = -30                -- ยกกล่องขึ้นเล็กน้อย (ลบ=ขึ้น, บวก=ลง)
-
--------------------- THEME --------------------
-local ACCENT = Color3.fromRGB(0,255,140)   -- เขียว UFO
-local BG     = Color3.fromRGB(12,12,12)    -- พื้นกล่อง
-local FG     = Color3.fromRGB(230,230,230) -- ตัวอักษร
-
--------------------- Helpers --------------------
-local function safeParent(gui)
-    local ok=false
-    if syn and syn.protect_gui then pcall(function() syn.protect_gui(gui) end) end
-    if gethui then ok = pcall(function() gui.Parent = gethui() end) end
-    if not ok then gui.Parent = CG end
-end
-local function make(class, props, kids)
-    local o = Instance.new(class)
-    for k,v in pairs(props or {}) do o[k]=v end
-    for _,c in ipairs(kids or {}) do c.Parent=o end
-    return o
-end
-
--- เรียกขั้นถัดไปหลังปิดหน้าโหลด
-local function openNextStep()
-    -- 1) ถ้ามีฮุคจากสคริปต์คีย์ ให้เรียกก่อน
-    local called = false
-    if type(_G.UFO_OnDownloadClosed) == "function" then
-        called = true
-        pcall(_G.UFO_OnDownloadClosed)
+---------------- Helpers ----------------
+local function HttpGet(u)
+    local ok, body
+    if http and http.request then
+        ok, body = pcall(function() return http.request({Url=u, Method="GET"}).Body end)
+        if ok and body then return body end
     end
-    -- 2) ถ้าไม่มีฮุค หรือฮุคไม่โหลดอะไรต่อ แล้วกำหนด URL ไว้ → โหลด UI หลัก
-    if _G.UFO_MAIN_URL and type(_G.UFO_MAIN_URL)=="string" and #_G.UFO_MAIN_URL>0 then
+    if syn and syn.request then
+        ok, body = pcall(function() return syn.request({Url=u, Method="GET"}).Body end)
+        if ok and body then return body end
+    end
+    ok, body = pcall(function() return game:HttpGet(u) end)
+    if ok and body then return body end
+    return nil
+end
+
+local function SafeLoadString(src, tag)
+    local f, e = loadstring(src, tag or "chunk")
+    if not f then return false, e end
+    local ok, err = pcall(f)
+    if not ok then return false, err end
+    return true
+end
+
+---------------- โหลดรายการแมพ ----------------
+local MAPS_URL = "https://raw.githubusercontent.com/UFO-HUB-X-Studio/UFO-HUB-X-Game/refs/heads/main/MultiMapBoot.lua"
+local mapsSrc = HttpGet(MAPS_URL); if not mapsSrc then return end
+local okBoot, Maps = pcall(function() return loadstring(mapsSrc, "MultiMapBoot")() end)
+if not okBoot or type(Maps) ~= "table" then return end
+
+local entry = Maps[game.PlaceId]
+if not entry or (not entry.th and not entry.en) then
+    -- แมพไม่รองรับ -> ไม่แสดงอะไร
+    return
+end
+
+---------------- UI เลือกภาษา (เป็นฟังก์ชัน เรียกหลังดาวน์โหลด) ----------------
+local function ShowLanguagePicker()
+    local Players = game:GetService("Players")
+    local CG      = game:GetService("CoreGui")
+    local TS      = game:GetService("TweenService")
+    local LP      = Players.LocalPlayer
+
+    local function softParent(gui)
+        if not gui then return end
         pcall(function()
-            loadstring(game:HttpGet(_G.UFO_MAIN_URL))()
+            if gui:IsA("ScreenGui") then
+                gui.IgnoreGuiInset = true
+                gui.DisplayOrder   = 999999
+                gui.ResetOnSpawn   = false
+                gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            end
+        end)
+        if syn and syn.protect_gui then pcall(syn.protect_gui, gui) end
+        local ok=false
+        if gethui then ok = pcall(function() gui.Parent = gethui() end) end
+        if (not ok) or (not gui.Parent) then ok = pcall(function() gui.Parent = CG end) end
+        if (not ok) or (not gui.Parent) then
+            if LP then
+                local pg = LP:FindFirstChildOfClass("PlayerGui") or LP:WaitForChild("PlayerGui", 2)
+                if pg then pcall(function() gui.Parent = pg end) end
+            end
+        end
+    end
+
+    local ACCENT=Color3.fromRGB(0,255,140)
+    local BG   =Color3.fromRGB(12,12,12)
+    local SUB  =Color3.fromRGB(22,22,22)
+    local FG   =Color3.fromRGB(235,235,235)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "UFOX_LangPicker"
+    softParent(gui)
+
+    local panel = Instance.new("Frame")
+    panel.Parent = gui
+    panel.AnchorPoint = Vector2.new(0.5,0.5)
+    panel.Position = UDim2.fromScale(0.5,0.5)
+    panel.Size = UDim2.fromOffset(460, 220)
+    panel.BackgroundColor3 = BG
+    panel.ZIndex = 10
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0,16)
+    local st = Instance.new("UIStroke", panel); st.Color = ACCENT; st.Transparency = 0.4
+
+    local title = Instance.new("TextLabel")
+    title.Parent = panel
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0,18,0,16)
+    title.Size = UDim2.new(1,-36,0,28)
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 22
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextColor3 = ACCENT
+    title.Text = (entry.name and ("Select Language • "..tostring(entry.name))) or "Select Language"
+
+    local sub = Instance.new("TextLabel")
+    sub.Parent = panel
+    sub.BackgroundTransparency = 1
+    sub.Position = UDim2.new(0,18,0,48)
+    sub.Size = UDim2.new(1,-36,0,22)
+    sub.Font = Enum.Font.Gotham
+    sub.TextSize = 14
+    sub.TextXAlignment = Enum.TextXAlignment.Left
+    sub.TextColor3 = Color3.fromRGB(200,200,200)
+    sub.Text = "โปรดเลือกภาษา (Choose a language):"
+
+    local row = Instance.new("Frame")
+    row.Parent = panel
+    row.BackgroundTransparency = 1
+    row.Position = UDim2.new(0,18,0,92)
+    row.Size = UDim2.new(1,-36,0,100)
+    local layout = Instance.new("UIListLayout", row)
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.Padding = UDim.new(0,14)
+
+    local function makeBtn(txt)
+        local b = Instance.new("TextButton")
+        b.Parent = row
+        b.AutoButtonColor = false
+        b.Size = UDim2.fromOffset(190, 60)
+        b.BackgroundColor3 = SUB
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 20
+        b.TextColor3 = FG
+        b.Text = txt
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0,12)
+        local s = Instance.new("UIStroke", b); s.Color = ACCENT; s.Transparency = 0.6
+        b.MouseEnter:Connect(function()
+            TS:Create(b, TweenInfo.new(0.08), {BackgroundColor3 = Color3.fromRGB(32,32,32)}):Play()
+        end)
+        b.MouseLeave:Connect(function()
+            TS:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = SUB}):Play()
+        end)
+        return b
+    end
+
+    local btnTH = makeBtn("🇹🇭  ภาษาไทย")
+    local btnEN = makeBtn("🇺🇸  English")
+
+    local function fadeAway(cb)
+        TS:Create(panel, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundTransparency=1}):Play()
+        for _,d in ipairs(panel:GetDescendants()) do
+            pcall(function()
+                if d:IsA("TextLabel") or d:IsA("TextButton") then
+                    TS:Create(d, TweenInfo.new(0.12), {TextTransparency=1, BackgroundTransparency=1}):Play()
+                elseif d:IsA("UIStroke") then
+                    TS:Create(d, TweenInfo.new(0.12), {Transparency=1}):Play()
+                end
+            end)
+        end
+        task.delay(0.18, function()
+            if gui and gui.Parent then gui:Destroy() end
+            if cb then cb() end
         end)
     end
-end
 
--------------------- ROOT GUI --------------------
-local gui = Instance.new("ScreenGui")
-gui.Name = "UFOHubX_Download"
-gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.IgnoreGuiInset = true                -- เต็มจอจริง
-safeParent(gui)
-
--------------------- BACKGROUND (เต็มจอ) --------------------
-local bg = make("ImageLabel", {
-    Parent=gui,
-    AnchorPoint=Vector2.new(0.5,0.5),
-    Position   =UDim2.fromScale(0.5,0.5),
-    Size       =UDim2.fromScale(1,1),
-    BackgroundTransparency=1,
-    Image="rbxassetid://"..BG_IMAGE_ID,
-    ScaleType=Enum.ScaleType.Crop
-}, {})
-bg.ZIndex = 0
-
--------------------- MAIN WINDOW --------------------
-local win = make("Frame", {
-    Parent=gui,
-    Size=UDim2.fromOffset(460, 260),
-    AnchorPoint=Vector2.new(0.5,0.5),
-    Position   =UDim2.fromScale(0.5,0.5) + UDim2.fromOffset(0, Y_OFFSET),
-    BackgroundColor3=BG,
-    BorderSizePixel=0
-}, {
-    make("UICorner",{CornerRadius=UDim.new(0,16)}),
-    make("UIStroke",{Thickness=2, Color=ACCENT, Transparency=0.08})
-})
-win.ZIndex = 2
-
--- รีเซ็นเตอร์เมื่อขนาดจอเปลี่ยน
-Cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-    win.Position = UDim2.fromScale(0.5,0.5) + UDim2.fromOffset(0, Y_OFFSET)
-end)
-
--------------------- HEADER: โลโก้ + ชื่อ --------------------
-local header = make("Frame", {
-    Parent=win, BackgroundTransparency=1,
-    Size=UDim2.new(1,0,0,120), Position=UDim2.new(0,0,0,12)
-}, {})
-local vlist = make("UIListLayout", {
-    Parent=header,
-    FillDirection = Enum.FillDirection.Vertical,
-    HorizontalAlignment = Enum.HorizontalAlignment.Center,
-    VerticalAlignment   = Enum.VerticalAlignment.Center,
-    SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0,8)
-}, {})
-
-local logo = make("ImageLabel", {
-    Parent=header, BackgroundTransparency=1,
-    Image="rbxassetid://"..LOGO_ID,
-    Size=UDim2.new(0,82,0,82),
-    LayoutOrder = 1
-}, {})
-logo.ZIndex = 3
-
-local titleRow = make("Frame", {
-    Parent=header, BackgroundTransparency=1,
-    Size=UDim2.new(1,0,0,34),
-    LayoutOrder = 2
-}, {})
-make("UIListLayout", {
-    Parent=titleRow,
-    FillDirection=Enum.FillDirection.Horizontal,
-    HorizontalAlignment=Enum.HorizontalAlignment.Center,
-    VerticalAlignment=Enum.VerticalAlignment.Center,
-    Padding=UDim.new(0,8)
-}, {})
-make("TextLabel", {
-    Parent=titleRow, BackgroundTransparency=1,
-    AutomaticSize=Enum.AutomaticSize.X,
-    Font=Enum.Font.GothamBold, TextSize=28,
-    Text="UFO", TextColor3=ACCENT
-}, {})
-make("TextLabel", {
-    Parent=titleRow, BackgroundTransparency=1,
-    AutomaticSize=Enum.AutomaticSize.X,
-    Font=Enum.Font.GothamBold, TextSize=28,
-    Text="HUB X", TextColor3=Color3.new(1,1,1)
-}, {})
-titleRow.ZIndex = 3
-
--------------------- PROGRESS BAR --------------------
-local barBG = make("Frame", {
-    Parent=win,
-    Size=UDim2.new(0, 340, 0, 22),
-    AnchorPoint=Vector2.new(0.5,0),
-    Position=UDim2.new(0.5,0,0,150),
-    BackgroundColor3=Color3.fromRGB(40,40,40),
-    BorderSizePixel=0
-}, {
-    make("UICorner",{CornerRadius=UDim.new(0,12)})
-})
-barBG.ZIndex = 3
-
-local barFill = make("Frame", {
-    Parent=barBG,
-    Size=UDim2.new(0,0,1,0),
-    BackgroundColor3=ACCENT,
-    BorderSizePixel=0
-}, {
-    make("UICorner",{CornerRadius=UDim.new(0,12)})
-})
-barFill.ZIndex = 4
-
-local percent = make("TextLabel", {
-    Parent=barBG,
-    BackgroundTransparency=1,
-    Size=UDim2.new(1,0,1,0),
-    Font=Enum.Font.GothamBold, TextSize=16,
-    Text="0%", TextColor3=FG,
-    TextXAlignment=Enum.TextXAlignment.Center,
-    TextYAlignment=Enum.TextYAlignment.Center
-}, {})
-percent.ZIndex = 10
-percent.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-percent.TextStrokeTransparency = 0.4
-
-local ufo = make("ImageLabel", {
-    Parent=barBG,
-    BackgroundTransparency=1,
-    Image="rbxassetid://"..UFO_RUN_ID,
-    Size=UDim2.new(0,28,0,28),
-    AnchorPoint=Vector2.new(0.5,0.5),
-    Position=UDim2.new(0,0,0.5,0)
-}, {})
-ufo.ZIndex = 6
-
--------------------- PROGRESS LOOP --------------------
-local start = tick()
-local done  = false
-
-local function finishAndGo()
-    if done then return end
-    done = true
-    task.delay(0.1, function()
-        pcall(function() gui:Destroy() end)
-        -- 🔗 เรียกเปิด UI UFO HUB X ต่อทันที
-        openNextStep()
-    end)
-end
-
-RS.RenderStepped:Connect(function()
-    if done then return end
-
-    local p = math.clamp((tick() - start) / DURATION, 0, 1)
-
-    -- อัพเดตหลอด + เปอร์เซ็นต์
-    barFill.Size = UDim2.new(p, 0, 1, 0)
-    percent.Text = string.format("%d%%", math.floor(p*100 + 0.5))
-
-    -- คุม UFO ให้อยู่ในกรอบหลอดเสมอ (clamp)
-    local barW    = barBG.AbsoluteSize.X
-    local halfUFO = ufo.AbsoluteSize.X / 2
-    local minX    = halfUFO
-    local maxX    = barW - halfUFO
-    local x       = math.clamp(p * barW, minX, maxX)
-    ufo.Position  = UDim2.fromOffset(x, barBG.AbsoluteSize.Y/2)
-
-    if p >= 1 then
-        finishAndGo()
+    local function go(url)
+        if not url or #url==0 then return end
+        fadeAway(function()
+            local src = HttpGet(url)
+            if src then SafeLoadString(src, "UFOX_GameScript") end
+        end)
     end
-end)
 
--- กันกรณีโดนหยุด RenderStepped (เช่นสลับหน้าต่าง) ก็ยังไปต่อได้
-task.delay(DURATION + 0.5, finishAndGo)
+    btnTH.MouseButton1Click:Connect(function() go(entry.th or entry.en) end)
+    btnEN.MouseButton1Click:Connect(function() go(entry.en or entry.th) end)
+end
+
+---------------- โหลด “หน้าดาวน์โหลด” ก่อน ----------------
+-- hook ให้หน้าดาวน์โหลดเรียกเราต่อเมื่อจบ
+_G.UFO_OnDownloadClosed = function()
+    pcall(ShowLanguagePicker)
+end
+-- ปิดทางโหลด UI หลักอัตโนมัติในดาวน์โหลด (ให้เราคุมเอง)
+_G.UFO_MAIN_URL = nil
+
+local DOWNLOAD_URL = "https://raw.githubusercontent.com/UFO-HUB-X-Studio/UFO-HUB-X-2/refs/heads/main/UFO%20HUB%20X%20Download.lua"
+local dlSrc = HttpGet(DOWNLOAD_URL)
+if dlSrc then
+    local ok = SafeLoadString(dlSrc, "UFO_Download_UI")
+    if not ok then
+        -- ถ้าหน้าดาวน์โหลดรันไม่ได้ → เปิดหน้าเลือกภาษาเลย
+        pcall(ShowLanguagePicker)
+    end
+else
+    -- ถ้าดาวน์โหลดไม่ได้ → เปิดหน้าเลือกภาษาเลย
+    pcall(ShowLanguagePicker)
+end
