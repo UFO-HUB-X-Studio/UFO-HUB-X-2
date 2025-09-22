@@ -1,6 +1,4 @@
--- UFO HUB X — Multi-Map Bootstrapper (Download first -> Language Picker)
--- ถ้าแมพไม่รองรับ: เงียบ ไม่ทำอะไร
--- ถ้ารองรับ: แสดงหน้า Download ก่อน แล้วเด้งหน้าเลือกภาษา (TH/EN) ทันทีที่จบ
+-- UFO HUB X — Multi-Map Bootstrapper (ALWAYS show Download -> then Language Picker if supported)
 
 ---------------- Helpers ----------------
 local function HttpGet(u)
@@ -26,20 +24,9 @@ local function SafeLoadString(src, tag)
     return true
 end
 
----------------- โหลดรายการแมพ ----------------
-local MAPS_URL = "https://raw.githubusercontent.com/UFO-HUB-X-Studio/UFO-HUB-X-Game/refs/heads/main/MultiMapBoot.lua"
-local mapsSrc = HttpGet(MAPS_URL); if not mapsSrc then return end
-local okBoot, Maps = pcall(function() return loadstring(mapsSrc, "MultiMapBoot")() end)
-if not okBoot or type(Maps) ~= "table" then return end
+local function ShowLanguagePicker(entry)
+    if not entry or (not entry.th and not entry.en) then return end
 
-local entry = Maps[game.PlaceId]
-if not entry or (not entry.th and not entry.en) then
-    -- แมพไม่รองรับ -> ไม่แสดงอะไร
-    return
-end
-
----------------- UI เลือกภาษา (เป็นฟังก์ชัน เรียกหลังดาวน์โหลด) ----------------
-local function ShowLanguagePicker()
     local Players = game:GetService("Players")
     local CG      = game:GetService("CoreGui")
     local TS      = game:GetService("TweenService")
@@ -72,9 +59,7 @@ local function ShowLanguagePicker()
     local SUB  =Color3.fromRGB(22,22,22)
     local FG   =Color3.fromRGB(235,235,235)
 
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "UFOX_LangPicker"
-    softParent(gui)
+    local gui = Instance.new("ScreenGui"); gui.Name = "UFOX_LangPicker"; softParent(gui)
 
     local panel = Instance.new("Frame")
     panel.Parent = gui
@@ -173,23 +158,34 @@ local function ShowLanguagePicker()
     btnEN.MouseButton1Click:Connect(function() go(entry.en or entry.th) end)
 end
 
----------------- โหลด “หน้าดาวน์โหลด” ก่อน ----------------
--- hook ให้หน้าดาวน์โหลดเรียกเราต่อเมื่อจบ
+---------------- HOOK: เรียกหลัง “หน้าดาวน์โหลด” ปิด ----------------
+_G.UFO_MAIN_URL = nil  -- กันไม่ให้หน้า Download เปิด UI อื่นเอง
 _G.UFO_OnDownloadClosed = function()
-    pcall(ShowLanguagePicker)
-end
--- ปิดทางโหลด UI หลักอัตโนมัติในดาวน์โหลด (ให้เราคุมเอง)
-_G.UFO_MAIN_URL = nil
+    -- โหลดรายการแมพ “ตอนนี้” แล้วค่อยตัดสินใจว่าจะโชว์ภาษาไหม
+    local MAPS_URL = "https://raw.githubusercontent.com/UFO-HUB-X-Studio/UFO-HUB-X-Game/refs/heads/main/MultiMapBoot.lua"
+    local mapsSrc = HttpGet(MAPS_URL); if not mapsSrc then return end
+    local okBoot, Maps = pcall(function() return loadstring(mapsSrc, "MultiMapBoot")() end)
+    if not okBoot or type(Maps) ~= "table" then return end
 
+    -- ป้องกันกรณีใช้ UniverseId → ลองเทียบทั้ง PlaceId และ UniverseId
+    local placeId    = game.PlaceId
+    local universeId = game.GameId
+    local entry = Maps[placeId] or Maps[universeId]
+
+    if entry and (entry.th or entry.en) then
+        ShowLanguagePicker(entry)
+    else
+        -- ไม่รองรับ → เงียบ ๆ (จบหลังหน้าโหลดหาย)
+    end
+end
+
+---------------- โหลด “หน้าดาวน์โหลด” เสมอ ----------------
 local DOWNLOAD_URL = "https://raw.githubusercontent.com/UFO-HUB-X-Studio/UFO-HUB-X-2/refs/heads/main/UFO%20HUB%20X%20Download.lua"
 local dlSrc = HttpGet(DOWNLOAD_URL)
 if dlSrc then
     local ok = SafeLoadString(dlSrc, "UFO_Download_UI")
-    if not ok then
-        -- ถ้าหน้าดาวน์โหลดรันไม่ได้ → เปิดหน้าเลือกภาษาเลย
-        pcall(ShowLanguagePicker)
-    end
+    if not ok then pcall(_G.UFO_OnDownloadClosed) end
 else
-    -- ถ้าดาวน์โหลดไม่ได้ → เปิดหน้าเลือกภาษาเลย
-    pcall(ShowLanguagePicker)
+    -- ถ้าโหลดไฟล์ดาวน์โหลดไม่ได้ ก็เรียกขั้นต่อไปเลย (พยายามโชว์ภาษา)
+    pcall(_G.UFO_OnDownloadClosed)
 end
